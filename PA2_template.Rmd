@@ -1,0 +1,59 @@
+---
+title: "Peer Assessment 2"
+author: "Allen Hammock"
+date: "September 16, 2014"
+output:
+  html_document:
+    keep_md: yes
+---
+
+# Synopsis
+
+This study addresses two questions:
+
+1. Across the United States, which types of events (as indicated in the `EVTYPE` variable) are most harmful with respect to population health?
+
+2. Across the United States, which types of events have the greatest economic consequences?
+
+
+
+# Data Processing
+
+```{r preprocess, echo = TRUE, cache = TRUE, message = FALSE}
+# Pre-load all required libraries
+library(dplyr)
+library(ggplot2)
+
+# Download and process data
+setwd("~/Google Drive/projects/r/coursera/RepData_PeerAssessment2")
+
+myfile.zip <- "StormData.csv.bz2"
+myfile.url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+
+if (!file.exists(myfile.zip)) {
+    download.file(url = myfile.url, destfile = myfile.zip, method = "curl")    
+}
+
+if (file.exists(myfile.zip)) {
+    # useful during development to force the data frame to
+    # be global scope and only load once, like a Singleton
+    if (!exists("myfile.df")) {
+        myfile.df <<- read.csv(bzfile(myfile.zip))    
+    }
+} else {
+    stop("ABORT. Input file missing, unable to download or decompress original.")
+}
+
+# Create summary table
+myfile.df.summary <- myfile.df %>% 
+    select(STATE, EVTYPE, FATALITIES, INJURIES, PROPDMG, CROPDMG) %>% 
+    mutate(TOTALDMG = PROPDMG + CROPDMG, TOTALHARMED = FATALITIES + INJURIES) %>% 
+    group_by(STATE, EVTYPE) %>% 
+    summarize(People.Harmed = sum(TOTALHARMED), Economic.Damage = sum(TOTALDMG))
+
+str(data.frame(myfile.df.summary))
+```
+
+# Results
+
+

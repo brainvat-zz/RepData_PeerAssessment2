@@ -1,0 +1,6 @@
+.Rproj.user
+.Rhistory
+.RData
+*.bz2
+*.csv
+PA2_template_cache/*
