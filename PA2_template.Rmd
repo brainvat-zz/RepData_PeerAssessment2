@@ -2,10 +2,12 @@
 title: "Effects of Severe Weather Events on Human Health and Property"
 output:
   html_document:
-    highlight: zenburn
     keep_md: yes
-    theme: cosmo
+    theme: spacelab
+    toc: yes
 ---
+
+*Last published on `r format(Sys.time(), tz="UTC", usetz = TRUE)`*
 
 # Synopsis
 
@@ -151,6 +153,9 @@ myfile.df.summary <- myfile.df %>%
              STATE.NAME,
              EVTYPE) %>% 
     summarize(People.Harmed = sum(TOTALHARMED), Economic.Damage = sum(TOTALDMG))
+
+# Relative threshold to make it into the "top" worst storms
+MAX_HARMS <- 20
 ```
 
 We now have a smaller data set that is easier to work with.
@@ -172,7 +177,7 @@ the average hurricane damage as the total number of people harmed divided by 3 (
 That way, weather types that do not appear every year are not misrepresented in our survey
 of damaging storm types.
 
-We'll look only at the `r MAX_HARMS <- 20; return(MAX_HARMS)` most harmful storm types out of the 
+We'll look only at the `r MAX_HARMS` most harmful storm types out of the 
 `r length(levels(myfile.df.summary$EVTYPE))` different classifications available.
 
 ```{r summarize_harms, echo = TRUE, cache = FALSE, message = FALSE}
@@ -189,7 +194,6 @@ top.harms <- myfile.df.summary %>%
     head(n = MAX_HARMS)
 
 # Find all severe events by region
-# Dollars in units of one thousand
 myfile.df.summary.by.harms <- myfile.df.summary %>% 
     filter(EVTYPE %in% top.harms$EVTYPE) %>%
     select(REGION, STATE, EVTYPE, BEGIN_YEAR, People.Harmed) %>%
@@ -221,7 +225,7 @@ top.damages <- myfile.df.summary %>%
     head(n = MAX_HARMS)
 
 # Find all severe events by region
-# Dollars in units of one thousand
+# Abbreviated dollars in units millions
 myfile.df.summary.by.damages <- myfile.df.summary %>% 
     filter(EVTYPE %in% top.damages$EVTYPE) %>%
     select(REGION, STATE, EVTYPE, BEGIN_YEAR, Economic.Damage) %>%
@@ -245,7 +249,7 @@ with the nationwide results observed **between `r min(myfile.df.summary$BEGIN_YE
 `r max(myfile.df.summary$BEGIN_YEAR)`**. These results include measurements taken from
 `r length(unique(myfile.df.summary$STATE))` states not including any U.S. territories.
 
-## 1. Which types of events are most harmful with respect to population health?
+## Types of events which are most harmful with respect to population health
 
 Here we'll look at the top `r MAX_HARMS` storms according to the total number of people they 
 harmed and the average number of people across the United States that were impacted in the
@@ -259,7 +263,7 @@ the top storm by average annual number of victims
 most number of people overall.
 
 ```{r figure_harms, echo = TRUE, cache = FALSE, message = FALSE, results = "asis"}
-names(top.harms) <- c("Storm Type", "No. of Years Witnessed", "Total Victims", "Average No. of Victims Per Year Witnessed") 
+names(top.harms) <- c("Storm Type", "Years w/Storm", "Total Victims", "Avg Annual Victims") 
 print(xtable(top.harms[,c(1, 4, 3, 2)], 
              caption = paste("Top", MAX_HARMS, 
                              "Storms Most Harmful to Public Health<br />",
@@ -269,13 +273,13 @@ print(xtable(top.harms[,c(1, 4, 3, 2)],
 ```
 
 
-## 2. Which types of events have the greatest economic consequences?
+## Types of events which have the greatest economic consequences
 
 Here we'll look at the top `r MAX_HARMS` storms according to the total damage they inflicted on
 the U.S. Economy and the average amount of damage they did each year they occurred.
 
 ```{r figure_damages, echo = TRUE, cache = FALSE, message = FALSE, results = "asis"}
-names(top.damages) <- c("Storm Type", "No. of Years Witnessed", "Total Economic Damage", "Average Damage Per Year Witnessed") 
+names(top.damages) <- c("Storm Type", "Years w/Storm", "Total Damage", "Avg Annual Damage") 
 print(xtable(top.damages[,c(1, 4, 3, 2)], 
              caption = paste("Top", MAX_HARMS, 
                              "Storms Most Damaging to U.S. Economy<br />",
@@ -284,12 +288,10 @@ print(xtable(top.damages[,c(1, 4, 3, 2)],
              type = "html")
 ```
 
-## Final summary
+## Variability of harms from region to region
 
 Now, we'll visualize our results in the form of a U.S. map.  Here, we'll only look at the
-`r MAX_PANELS <- 6; return(MAX_PANELS)` most damaging storm types: 
-**`r top.damages[1,c("Storm Type")]`**, **`r top.damages[2,c("Storm Type")]`** and 
-**`r top.damages[3,c("Storm Type")]`**.
+`r MAX_PANELS <- 6; return(MAX_PANELS)` most damaging storm types.
 
 The panels in the plot below give some feedback to policy makers on which kinds of storm
 prevention or early detection could be implemented.
@@ -307,21 +309,32 @@ top.storms.totals <- myfile.df.summary.by.damages %>%
 
 top.storms.summary <- myfile.df.summary %>% 
     filter(EVTYPE %in% top.storms) %>%
-    select(REGION, STATE.NAME, EVTYPE, Economic.Damage) %>%
+    select(REGION, STATE.NAME, EVTYPE, BEGIN_YEAR, Economic.Damage) %>%
+    group_by(BEGIN_YEAR, EVTYPE, REGION, STATE.NAME) %>% 
+    summarize(Years.In.Study = n(),
+              Total.Economic.Damage = round(sum(Economic.Damage) / 1000000, 0)) %>%    
     group_by(EVTYPE, REGION, STATE.NAME) %>% 
-    summarize(Total.Economic.Damage = round(sum(Economic.Damage) / 1000000, 0)) %>%    
+    summarize(Total.Economic.Damage = sum(Total.Economic.Damage),
+              Total.Years.In.Study = sum(Years.In.Study),
+              Avg.Annual.Economic.Damage = round(Total.Economic.Damage / Total.Years.In.Study, 2)) %>%    
     merge(top.storms.totals) %>%
-    mutate(Percent.Damage = round(100 * Total.Economic.Damage / Total.EVTYPE.Economic.Damage, 3)) %>%
+    mutate(Percent.Damage = 
+               round(100 * Avg.Annual.Economic.Damage / 
+                         (Total.EVTYPE.Economic.Damage / Total.Years.In.Study), 3)) %>%
     mutate(region = tolower(STATE.NAME)) %>%
-    select(EVTYPE, region, REGION, Percent.Damage)
+    select(EVTYPE, region, REGION, Percent.Damage, Avg.Annual.Economic.Damage)
 
 top.storms.merged <- merge(draw.states, top.storms.summary, sort = FALSE, by = "region")
 top.storms.merged <- top.storms.merged[order(top.storms.merged$order), ]
 ```
 ```{r maps.png, echo = TRUE, cache = FALSE, message = FALSE, comment = NA, warning = FALSE}
 png("maps.png",height=1750, width=1600)
-p1 <- qplot(main=paste("Distribution of Economic Damage By Storm Type and Region",
-                       "\nTop Storms by Total Economic Damage", sep = ""),
+p1 <- qplot(main=paste("Distribution of Average Annual Economic Damage By Storm Type and Region",
+                       "\nFor Top", MAX_HARMS, "Storms by Total Economic Damage Between",
+                       min(myfile.df.summary$BEGIN_YEAR),
+                       "and",
+                       max(myfile.df.summary$BEGIN_YEAR),
+                       sep = " "),
             long, 
             lat, 
             data = top.storms.merged, 
@@ -335,10 +348,20 @@ p1 <- qplot(main=paste("Distribution of Economic Damage By Storm Type and Region
       #coord_equal() +
       theme(strip.text.x = element_text(size = 24),
             strip.text.y = element_text(size = 24),
-            title = element_text(size = 40),
+            title = element_text(size = 30),
             legend.background = element_rect(size = 20))
 print(p1)
 dev.off()
 ```
+
+**NOTE:** each cell in the panel below shows the percentage distribution of annaul average economic 
+harm for each state in the given region.  For example, **`r top.storms.summary[1, ]$region`** received
+**`r top.storms.summary[1, ]$Percent.Damage`%** of the overaall damage by
+**`r top.storms.summary[1, ]$EVTYPE`** in the **`r top.storms.summary[1, ]$REGION` region**
+which sustained an average annual economic damage of 
+**$`r top.storms.summary[1, ]$Avg.Annual.Economic.Damage` million dollars**
+from storms of that type.
+
+Each graph considers what portion of that region's damage the state sustained.
 
 ![U.S. Map Distribution of Damage by State](maps.png "U.S. Map Distribution of Damage by State")
