@@ -1,8 +1,10 @@
 ---
-title: "Effects of Severe Weather Events on Human Health and Property from January 1996 - December 2010"
+title: "Effects of Severe Weather Events on Human Health and Property"
 output:
   html_document:
+    highlight: zenburn
     keep_md: yes
+    theme: cosmo
 ---
 
 # Synopsis
@@ -26,7 +28,9 @@ excluding U.S. territories.
 
 # Data Processing
 
-First, we extract the storm data observations from the origianal National Weather Service source
+## Load data from raw CSV
+
+First, we extract the storm data observations from the original National Weather Service source
 and append the regional information we need to conduct the study.
 
 ```{r preload_libraries, echo = TRUE, cache = FALSE, message = FALSE}
@@ -40,8 +44,8 @@ library(maps)
 
 ```{r load_data, echo = TRUE, cache = TRUE, message = FALSE}
 # Download and process data
-setwd("~/Google Drive/projects/r/coursera/RepData_PeerAssessment2")
-
+# uncomment this line and set to your working directory
+# setwd("~/Google Drive/projects/r/coursera/RepData_PeerAssessment2")
 myfile.zip <- "StormData.csv.bz2"
 myfile.url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
 
@@ -60,6 +64,8 @@ if (file.exists(myfile.zip)) {
 }
 ```
 
+## Additional post-processing 
+
 The source data contains a total of **`r formatC(nrow(myfile.df), format="d", big.mark=',')` observations** 
 across **`r ncol(myfile.df)` variables**.  We are interested only in the following derived variables:
 
@@ -67,13 +73,19 @@ across **`r ncol(myfile.df)` variables**.  We are interested only in the followi
 * total number of people harmed through injury or fatality
 * the variances of these measurements by region and severe weather event
 
+The original data set doesn't encode the observations by region, so we'll have to do that ourselves.
+Further, the economic damage variables are stored as abbreviated measurements.  We'll have to 
+expand those back to full measures in order to be able to sum them properly.
+
+We'll end up later abbreviating the results again later when it is time to display figures.
+
 ```{r summarize_data, echo = TRUE, cache = FALSE, message = FALSE}
 # Prepare regions
 # http://education.nationalgeographic.com/education/maps/united-states-regions/?ar_a=1
 regions <- rbind(data.frame(REGION = character(), STATE = character(), stringsAsFactors = FALSE), 
                  cbind(REGION = "West", 
                        STATE = c("WA", "OR", "ID", "MT", "WY", "CA", "NV", 
-                                 "UT", "CO", "HI", "AL")),
+                                 "UT", "CO", "HI", "AK")),
                  cbind(REGION = "Southwest", 
                        STATE = c("AZ", "NM", "TX", "OK")),
                  cbind(REGION = "Midwest", 
@@ -130,7 +142,7 @@ myfile.df.summary <- myfile.df %>%
            BEGIN_YEAR = year(mdy_hms(BGN_DATE))
            ) %>%
     # look at only recent data where there were harms or damages
-    filter(BEGIN_YEAR >= 1996 & BEGIN_YEAR <= 2010 & TOTALDMG > 0 & TOTALHARMED > 0) %>%
+    filter(BEGIN_YEAR >= 1996 & BEGIN_YEAR <= 2010 & (TOTALDMG > 0 | TOTALHARMED > 0)) %>%
     # get rid of the original metrics
     select(-PROPDMG, -CROPDMG, -FATALITIES, -INJURIES, -BGN_DATE) %>%
     group_by(BEGIN_YEAR, 
@@ -142,6 +154,8 @@ myfile.df.summary <- myfile.df %>%
 ```
 
 We now have a smaller data set that is easier to work with.
+
+## Data summarization
 
 To address the research questions, we calculate two more summary tables.  First, we
 look at the effects of severe weather on public health and the economy by region.  We use
@@ -226,10 +240,105 @@ does the most damage to property and crops, affecting more people in the
 
 # Results
 
-We've now completed our data processing and we're ready to look at the results.  Our original 
-research goals were to establish:
+We've now completed our data processing and we're ready to look at the results.  We'll start
+with the nationwide results observed **between `r min(myfile.df.summary$BEGIN_YEAR)` and
+`r max(myfile.df.summary$BEGIN_YEAR)`**. These results include measurements taken from
+`r length(unique(myfile.df.summary$STATE))` states not including any U.S. territories.
 
-1. Which types of events are most harmful with respect to population health?
-2. Which types of events have the greatest economic consequences?
+## 1. Which types of events are most harmful with respect to population health?
+
+Here we'll look at the top `r MAX_HARMS` storms according to the total number of people they 
+harmed and the average number of people across the United States that were impacted in the
+years those storms occurred.
+
+We'll see from our analysis that **`r top.harms[1, c(1)]`** tends to harm the
+greatest number of people in the years this type of storm appeared in our data set.
+**`r res <- top.harms[1, c(3)] == max(top.harms[, c(3)]); ifelse(res, "Incidentally", "However")`**
+the top storm by average annual number of victims
+**`r ifelse(res, "was also", "was not")`** the same storm type that harmed the
+most number of people overall.
+
+```{r figure_harms, echo = TRUE, cache = FALSE, message = FALSE, results = "asis"}
+names(top.harms) <- c("Storm Type", "No. of Years Witnessed", "Total Victims", "Average No. of Victims Per Year Witnessed") 
+print(xtable(top.harms[,c(1, 4, 3, 2)], 
+             caption = paste("Top", MAX_HARMS, 
+                             "Storms Most Harmful to Public Health<br />",
+                             "By Average Number of Victims Annually"),
+             display = c("s", "s", "d", "d", "d")), 
+             type = "html")
+```
 
 
+## 2. Which types of events have the greatest economic consequences?
+
+Here we'll look at the top `r MAX_HARMS` storms according to the total damage they inflicted on
+the U.S. Economy and the average amount of damage they did each year they occurred.
+
+```{r figure_damages, echo = TRUE, cache = FALSE, message = FALSE, results = "asis"}
+names(top.damages) <- c("Storm Type", "No. of Years Witnessed", "Total Economic Damage", "Average Damage Per Year Witnessed") 
+print(xtable(top.damages[,c(1, 4, 3, 2)], 
+             caption = paste("Top", MAX_HARMS, 
+                             "Storms Most Damaging to U.S. Economy<br />",
+                             "In Millions of Dollars per Year"),
+             display = c("s", "s", "d", "d", "d")), 
+             type = "html")
+```
+
+## Final summary
+
+Now, we'll visualize our results in the form of a U.S. map.  Here, we'll only look at the
+`r MAX_PANELS <- 6; return(MAX_PANELS)` most damaging storm types: 
+**`r top.damages[1,c("Storm Type")]`**, **`r top.damages[2,c("Storm Type")]`** and 
+**`r top.damages[3,c("Storm Type")]`**.
+
+The panels in the plot below give some feedback to policy makers on which kinds of storm
+prevention or early detection could be implemented.
+
+```{r figure_usmap, echo = TRUE, cache = FALSE, message = FALSE}
+# draw panel with the top storms
+top.storms <- top.damages[1:min(MAX_PANELS, nrow(top.damages)),c("Storm Type")]
+draw.states <- map_data("state")
+
+top.storms.totals <- myfile.df.summary.by.damages %>% 
+    filter(EVTYPE %in% top.storms) %>%
+    select(REGION, EVTYPE, Total.Economic.Damage) %>%
+    group_by(EVTYPE, REGION) %>% 
+    summarize(Total.EVTYPE.Economic.Damage = round(sum(Total.Economic.Damage), 0))
+
+top.storms.summary <- myfile.df.summary %>% 
+    filter(EVTYPE %in% top.storms) %>%
+    select(REGION, STATE.NAME, EVTYPE, Economic.Damage) %>%
+    group_by(EVTYPE, REGION, STATE.NAME) %>% 
+    summarize(Total.Economic.Damage = round(sum(Economic.Damage) / 1000000, 0)) %>%    
+    merge(top.storms.totals) %>%
+    mutate(Percent.Damage = round(100 * Total.Economic.Damage / Total.EVTYPE.Economic.Damage, 3)) %>%
+    mutate(region = tolower(STATE.NAME)) %>%
+    select(EVTYPE, region, REGION, Percent.Damage)
+
+top.storms.merged <- merge(draw.states, top.storms.summary, sort = FALSE, by = "region")
+top.storms.merged <- top.storms.merged[order(top.storms.merged$order), ]
+```
+```{r maps.png, echo = TRUE, cache = FALSE, message = FALSE, comment = NA, warning = FALSE}
+png("maps.png",height=1750, width=1600)
+p1 <- qplot(main=paste("Distribution of Economic Damage By Storm Type and Region",
+                       "\nTop Storms by Total Economic Damage", sep = ""),
+            long, 
+            lat, 
+            data = top.storms.merged, 
+            facets = EVTYPE ~ REGION,
+            group = group, 
+            fill = Percent.Damage,
+            geom = "polygon",
+            xlab = "",
+            ylab = "") +
+      geom_path(color="black") +
+      #coord_equal() +
+      theme(strip.text.x = element_text(size = 24),
+            strip.text.y = element_text(size = 24),
+            title = element_text(size = 40),
+            legend.background = element_rect(size = 20))
+print(p1)
+dev.off()
+```
+
+![U.S. Map Distribution of Damage by State](maps.png "U.S. Map Distribution of Damage by State")
