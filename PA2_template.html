@@ -71,7 +71,8 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 library(dplyr)
 library(ggplot2)
 library(lubridate)
-library(xtable)</code></pre>
+library(xtable)
+library(maps)</code></pre>
 <pre class="r"><code># Download and process data
 setwd(&quot;~/Google Drive/projects/r/coursera/RepData_PeerAssessment2&quot;)
 
@@ -116,6 +117,9 @@ regions &lt;- rbind(data.frame(REGION = character(), STATE = character(), string
                                  &quot;NH&quot;, &quot;VT&quot;, &quot;ME&quot;))
                  )
 
+data(&quot;state&quot;)
+us.states &lt;- data.frame(STATE = state.abb, STATE.NAME = state.name)
+
 # convenience tables to convert units
 PROP.conversions &lt;- rbind(
         data.frame(PROPDMGEXP = &quot;&quot;, PROPDMGMULT = 1),
@@ -144,541 +148,95 @@ myfile.df.summary &lt;- myfile.df %&gt;%
            PROPDMGEXP, # exponent for property damages
            CROPDMG, # Crop Damage in abbreviated dollar amounts according to WSOM Chapter F-42
            CROPDMGEXP, # exponent for crop damages
-           BGN_DATE, # Y/M/D HH:MM:SS in local time
-           END_DATE # Y/MD/D HH:MM:SS in local time
+           BGN_DATE # Y/M/D HH:MM:SS in local time
            ) %&gt;%
     filter(STATE %in% regions$STATE) %&gt;%
     left_join(regions) %&gt;%
+    left_join(us.states) %&gt;%
     left_join(PROP.conversions) %&gt;%
     left_join(CROP.conversions) %&gt;%
     mutate(TOTALDMG =  (PROPDMG * PROPDMGMULT) + (CROPDMG * CROPDMGMULT), 
            TOTALHARMED = FATALITIES + INJURIES,
-           BEGIN_YEAR = year(mdy_hms(BGN_DATE)),
-           BEGIN_MONTH = month(mdy_hms(BGN_DATE)),
-           END_YEAR = year(mdy_hms(END_DATE)),
-           END_MONTH = month(mdy_hms(END_DATE)),
-           BEGIN_YEARMONTH = as.factor(paste(BEGIN_YEAR, 
-                                             formatC(BEGIN_MONTH, width = 2, flag = &quot;0&quot;), 
-                                             sep = &quot;-&quot;)),
-           END_YEARMONTH = as.factor(paste(END_YEAR, 
-                                           formatC(END_MONTH, width = 2, flag = &quot;0&quot;), 
-                                           sep = &quot;-&quot;)
-           )) %&gt;%
+           BEGIN_YEAR = year(mdy_hms(BGN_DATE))
+           ) %&gt;%
     # look at only recent data where there were harms or damages
-    filter(BEGIN_YEAR &gt;= 1996 &amp; END_YEAR &lt;= 2010 &amp; TOTALDMG &gt; 0 &amp; TOTALHARMED &gt; 0) %&gt;%
+    filter(BEGIN_YEAR &gt;= 1996 &amp; BEGIN_YEAR &lt;= 2010 &amp; TOTALDMG &gt; 0 &amp; TOTALHARMED &gt; 0) %&gt;%
     # get rid of the original metrics
-    select(-PROPDMG, -CROPDMG, -FATALITIES, -INJURIES, -BGN_DATE, -END_DATE) %&gt;%
+    select(-PROPDMG, -CROPDMG, -FATALITIES, -INJURIES, -BGN_DATE) %&gt;%
     group_by(BEGIN_YEAR, 
-             BEGIN_MONTH, 
-             END_YEAR, 
-             END_MONTH, 
-             BEGIN_YEARMONTH, 
-             END_YEARMONTH,
              REGION,
-             STATE, 
+             STATE,
+             STATE.NAME,
              EVTYPE) %&gt;% 
-    summarize(People.Harmed = sum(TOTALHARMED), Economic.Damage = sum(TOTALDMG))
-
-# pull out a couple of examples to illustrate
-tornado.summary &lt;- myfile.df.summary %&gt;%
-    filter(grepl(pattern = &quot;tornado&quot;, x = EVTYPE, ignore.case = TRUE)) %&gt;%
-    group_by(BEGIN_YEAR) %&gt;%
-    summarize(Total.Cost = round(sum(Economic.Damage) / 1000, 0)) %&gt;%
-    mutate(Total.Cost.Pretty = paste(&quot;$&quot;, formatC(Total.Cost, format=&quot;d&quot;, big.mark=','), sep = &quot;&quot;))
-tornado.worst.year &lt;- tornado.summary %&gt;%
-    arrange(desc(Total.Cost), BEGIN_YEAR) %&gt;%
-    select(BEGIN_YEAR) %&gt;%
-    head(n = 1)
-names(tornado.summary) &lt;- c(&quot;Year&quot;, &quot;Total.Cost&quot;, &quot;Damages (Thousands of Dollars)&quot;)
-
-arizona.summary &lt;- myfile.df.summary %&gt;%
-    filter(STATE == &quot;AZ&quot;) %&gt;%
-    group_by(EVTYPE) %&gt;%
-    summarize(Total.Cost = round(sum(Economic.Damage) / 1000, 0)) %&gt;%
-    mutate(Total.Cost.Pretty = paste(&quot;$&quot;, formatC(Total.Cost, format=&quot;d&quot;, big.mark=','), sep = &quot;&quot;)) %&gt;%
-    arrange(desc(Total.Cost), EVTYPE)
-arizona.worst.weather &lt;- arizona.summary %&gt;%
-    head(n = 1) %&gt;%
-    select(EVTYPE)
-names(arizona.summary) &lt;- c(&quot;Weather Type&quot;, &quot;Total.Cost&quot;, &quot;Damages (Thousands of Dollars)&quot;)</code></pre>
-<p>We now have a smaller data set that is easier to work with. For example, we can see that tornados did the most economic damage in 1999:</p>
-<pre class="r"><code>print(xtable(tornado.summary[,c(1,3)], 
-             caption = &quot;Tornado Damages&quot;, display = c(&quot;d&quot;, &quot;d&quot;, &quot;s&quot;)), 
-             type = &quot;html&quot;, include.rownames = FALSE)</code></pre>
-<!-- html table generated in R 3.1.1 by xtable 1.7-3 package -->
-<!-- Sat Sep 20 22:30:33 2014 -->
-<TABLE border="1">
-<CAPTION ALIGN="bottom"> 
-Tornado Damages
-</CAPTION>
-<TR> <TH> 
-Year
-</TH> <TH> 
-Damages (Thousands of Dollars)
-</TH>  </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-$626,719
-</TD> </TR>
-  <TR> <TD align="right"> 
-1997
-</TD> <TD> 
-$634,837
-</TD> </TR>
-  <TR> <TD align="right"> 
-1998
-</TD> <TD> 
-$1,572,986
-</TD> </TR>
-  <TR> <TD align="right"> 
-1999
-</TD> <TD> 
-$1,824,680
-</TD> </TR>
-  <TR> <TD align="right"> 
-2000
-</TD> <TD> 
-$364,290
-</TD> </TR>
-  <TR> <TD align="right"> 
-2001
-</TD> <TD> 
-$503,823
-</TD> </TR>
-  <TR> <TD align="right"> 
-2002
-</TD> <TD> 
-$634,264
-</TD> </TR>
-  <TR> <TD align="right"> 
-2003
-</TD> <TD> 
-$997,791
-</TD> </TR>
-  <TR> <TD align="right"> 
-2004
-</TD> <TD> 
-$318,714
-</TD> </TR>
-  <TR> <TD align="right"> 
-2005
-</TD> <TD> 
-$260,071
-</TD> </TR>
-  <TR> <TD align="right"> 
-2006
-</TD> <TD> 
-$574,504
-</TD> </TR>
-  <TR> <TD align="right"> 
-2007
-</TD> <TD> 
-$1,547,807
-</TD> </TR>
-  <TR> <TD align="right"> 
-2008
-</TD> <TD> 
-$1,366,671
-</TD> </TR>
-  <TR> <TD align="right"> 
-2009
-</TD> <TD> 
-$393,450
-</TD> </TR>
-  <TR> <TD align="right"> 
-2010
-</TD> <TD> 
-$740,023
-</TD> </TR>
-   </TABLE>
-
-<p>Or, we can see that <strong>hail</strong> did the most damage of all severe weather types in the state.</p>
-<pre class="r"><code>print(xtable(arizona.summary[,c(1,3)], 
-             caption = &quot;Arizona Weather&quot;, display = c(&quot;d&quot;, &quot;d&quot;, &quot;s&quot;)), 
-             type = &quot;html&quot;, include.rownames = FALSE)</code></pre>
-<!-- html table generated in R 3.1.1 by xtable 1.7-3 package -->
-<!-- Sat Sep 20 22:30:33 2014 -->
-<TABLE border="1">
-<CAPTION ALIGN="bottom"> 
-Arizona Weather
-</CAPTION>
-<TR> <TH> 
-Weather Type
-</TH> <TH> 
-Damages (Thousands of Dollars)
-</TH>  </TR>
-  <TR> <TD> 
-HAIL
-</TD> <TD> 
-$1,818,000
-</TD> </TR>
-  <TR> <TD> 
-TSTM WIND
-</TD> <TD> 
-$193,814
-</TD> </TR>
-  <TR> <TD> 
-FLASH FLOOD
-</TD> <TD> 
-$13,585
-</TD> </TR>
-  <TR> <TD> 
-THUNDERSTORM WIND
-</TD> <TD> 
-$6,431
-</TD> </TR>
-  <TR> <TD> 
-TORNADO
-</TD> <TD> 
-$1,000
-</TD> </TR>
-  <TR> <TD> 
-WILDFIRE
-</TD> <TD> 
-$560
-</TD> </TR>
-  <TR> <TD> 
-DUST STORM
-</TD> <TD> 
-$454
-</TD> </TR>
-  <TR> <TD> 
-TSTM WIND/HAIL
-</TD> <TD> 
-$100
-</TD> </TR>
-  <TR> <TD> 
-WINTER WEATHER
-</TD> <TD> 
-$100
-</TD> </TR>
-  <TR> <TD> 
-LIGHTNING
-</TD> <TD> 
-$50
-</TD> </TR>
-  <TR> <TD> 
-HIGH WIND
-</TD> <TD> 
-$42
-</TD> </TR>
-  <TR> <TD> 
-DRY MICROBURST
-</TD> <TD> 
-$5
-</TD> </TR>
-  <TR> <TD> 
-STRONG WIND
-</TD> <TD> 
-$5
-</TD> </TR>
-  <TR> <TD> 
-URBAN/SML STREAM FLD
-</TD> <TD> 
-$1
-</TD> </TR>
-   </TABLE>
-
+    summarize(People.Harmed = sum(TOTALHARMED), Economic.Damage = sum(TOTALDMG))</code></pre>
+<p>We now have a smaller data set that is easier to work with.</p>
 <p>To address the research questions, we calculate two more summary tables. First, we look at the effects of severe weather on public health and the economy by region. We use the following definitions:</p>
 <ul>
 <li><strong>people harmed</strong> is defined as the total number of people who suffered injury or were killed</li>
 <li><strong>economic damage</strong> is measured in terms of the total dollar value of damages to crops and property</li>
 </ul>
-<p>First, we summarize these measurements by weather type and region.</p>
-<pre class="r"><code># Find all severe events by region
-# Dollars in units of one thousand
-myfile.df.summary.by.region &lt;- myfile.df.summary %&gt;% 
-    select(REGION, EVTYPE, BEGIN_YEAR, People.Harmed, Economic.Damage) %&gt;%
-    group_by(REGION, EVTYPE) %&gt;% 
+<p>To sort out which types of severe weather have the most impact, we’ll look at the average amount of harm that each weather type did in the years where the weather was observed. For example, if we look at 15 years of data, but a hurricane appears in the data in three of those years, we’ll take the average hurricane damage as the total number of people harmed divided by 3 (not 15).</p>
+<p>That way, weather types that do not appear every year are not misrepresented in our survey of damaging storm types.</p>
+<p>We’ll look only at the 20 most harmful storm types out of the 985 different classifications available.</p>
+<pre class="r"><code># Find the top most harmful storm types
+top.harms &lt;- myfile.df.summary %&gt;% 
+    select(EVTYPE, BEGIN_YEAR, STATE, STATE.NAME, People.Harmed) %&gt;%
+    group_by(EVTYPE, BEGIN_YEAR) %&gt;% 
+    summarize(Total.People.Harmed = sum(People.Harmed)) %&gt;%
+    group_by(EVTYPE) %&gt;%
     summarize(Years.In.Range = n(),
-              Total.People.Harmed = sum(People.Harmed),
-              Avg.Annual.People.Harmed = Total.People.Harmed / Years.In.Range,
-              Total.Economic.Damage = sum(Economic.Damage) / 1000,
-              Avg.Annual.Economic.Damage = (Total.Economic.Damage / Years.In.Range)/1000) %&gt;%
-    select(-Years.In.Range) %&gt;%
-    arrange(-Total.Economic.Damage, -Total.People.Harmed)</code></pre>
-<p>Here are the first 10 rows of our summary table:</p>
-<pre class="r"><code>print(xtable(myfile.df.summary.by.region[1:10,], 
-             caption = &quot;Health and Economic Harms by Region&lt;br /&gt;Damages in Thousands of Dollars&quot;,
-             display = c(&quot;s&quot;, &quot;s&quot;, &quot;s&quot;, &quot;d&quot;, &quot;d&quot;, &quot;d&quot;, &quot;d&quot;)), 
-             type = &quot;html&quot;, include.rownames = FALSE)</code></pre>
-<!-- html table generated in R 3.1.1 by xtable 1.7-3 package -->
-<!-- Sat Sep 20 22:30:33 2014 -->
-<TABLE border="1">
-<CAPTION ALIGN="bottom"> 
-Health and Economic Harms by Region<br />Damages in Thousands of Dollars
-</CAPTION>
-<TR> <TH> 
-REGION
-</TH> <TH> 
-EVTYPE
-</TH> <TH> 
-Total.People.Harmed
-</TH> <TH> 
-Avg.Annual.People.Harmed
-</TH> <TH> 
-Total.Economic.Damage
-</TH> <TH> 
-Avg.Annual.Economic.Damage
-</TH>  </TR>
-  <TR> <TD> 
-Southeast
-</TD> <TD> 
-HURRICANE/TYPHOON
-</TD> <TD align="right"> 
-974
-</TD> <TD align="right">  
-74
-</TD> <TD align="right"> 
-32517480
-</TD> <TD align="right"> 
-2501
-</TD> </TR>
-  <TR> <TD> 
-Southeast
-</TD> <TD> 
-TORNADO
-</TD> <TD align="right"> 
-7930
-</TD> <TD align="right">  
-21
-</TD> <TD align="right"> 
-5466739
-</TD> <TD align="right">  
-14
-</TD> </TR>
-  <TR> <TD> 
-Southwest
-</TD> <TD> 
-TROPICAL STORM
-</TD> <TD align="right">  
-29
-</TD> <TD align="right">   
-7
-</TD> <TD align="right"> 
-5442480
-</TD> <TD align="right"> 
-1360
-</TD> </TR>
-  <TR> <TD> 
-Southwest
-</TD> <TD> 
-STORM SURGE/TIDE
-</TD> <TD align="right">  
-11
-</TD> <TD align="right">  
-11
-</TD> <TD align="right"> 
-4000000
-</TD> <TD align="right"> 
-4000
-</TD> </TR>
-  <TR> <TD> 
-Southeast
-</TD> <TD> 
-HURRICANE
-</TD> <TD align="right">  
-59
-</TD> <TD align="right">   
-4
-</TD> <TD align="right"> 
-3864540
-</TD> <TD align="right"> 
-276
-</TD> </TR>
-  <TR> <TD> 
-Midwest
-</TD> <TD> 
-TORNADO
-</TD> <TD align="right"> 
-3894
-</TD> <TD align="right">  
-17
-</TD> <TD align="right"> 
-3362803
-</TD> <TD align="right">  
-15
-</TD> </TR>
-  <TR> <TD> 
-West
-</TD> <TD> 
-WILDFIRE
-</TD> <TD align="right"> 
-522
-</TD> <TD align="right">  
-16
-</TD> <TD align="right"> 
-3131954
-</TD> <TD align="right"> 
-101
-</TD> </TR>
-  <TR> <TD> 
-Southeast
-</TD> <TD> 
-HIGH WIND
-</TD> <TD align="right"> 
-218
-</TD> <TD align="right">   
-4
-</TD> <TD align="right"> 
-2681120
-</TD> <TD align="right">  
-52
-</TD> </TR>
-  <TR> <TD> 
-Southwest
-</TD> <TD> 
-HAIL
-</TD> <TD align="right"> 
-115
-</TD> <TD align="right">   
-5
-</TD> <TD align="right"> 
-2294648
-</TD> <TD align="right"> 
-114
-</TD> </TR>
-  <TR> <TD> 
-Southwest
-</TD> <TD> 
-HURRICANE/TYPHOON
-</TD> <TD align="right">   
-9
-</TD> <TD align="right">   
-4
-</TD> <TD align="right"> 
-2260380
-</TD> <TD align="right"> 
-1130
-</TD> </TR>
-   </TABLE>
+              Total.People.Harmed = sum(Total.People.Harmed),
+              Avg.Annual.People.Harmed = round(Total.People.Harmed / Years.In.Range, 0)) %&gt;%
+    arrange(-Avg.Annual.People.Harmed) %&gt;%
+    head(n = MAX_HARMS)
 
-<p>Then, we look at the total effects of each weather type across the country year by year.</p>
-<pre class="r"><code># Find all severe events by year
+# Find all severe events by region
 # Dollars in units of one thousand
+myfile.df.summary.by.harms &lt;- myfile.df.summary %&gt;% 
+    filter(EVTYPE %in% top.harms$EVTYPE) %&gt;%
+    select(REGION, STATE, EVTYPE, BEGIN_YEAR, People.Harmed) %&gt;%
+    group_by(REGION, EVTYPE, STATE) %&gt;% 
+    summarize(Total.People.Harmed = sum(People.Harmed)) %&gt;%
+    group_by(REGION, EVTYPE) %&gt;%
+    summarize(Years.In.Range = n(),
+              Total.People.Harmed = sum(Total.People.Harmed),
+              Avg.Annual.People.Harmed = round(Total.People.Harmed / Years.In.Range, 0)) %&gt;%
+    arrange(-Total.People.Harmed)</code></pre>
+<p>Overall, the storm type <strong>TORNADO</strong> has the biggest impact nationwide on population health affecting more people in the <strong>Southeast</strong> more than any other region.</p>
+<pre class="r"><code># Find the top most damaging storm types
+# Measured in millions of dollars
+top.damages &lt;- myfile.df.summary %&gt;% 
+    select(EVTYPE, BEGIN_YEAR, STATE, STATE.NAME, Economic.Damage) %&gt;%
+    group_by(EVTYPE, BEGIN_YEAR) %&gt;% 
+    summarize(Total.Economic.Damage = sum(Economic.Damage)) %&gt;%
+    group_by(EVTYPE) %&gt;%
+    summarize(Years.In.Range = n(),
+              Total.Economic.Damage = round(sum(Total.Economic.Damage) / 1000000, 0),
+              Avg.Annual.Economic.Damage = round(Total.Economic.Damage / Years.In.Range, 0)) %&gt;%
+    arrange(-Avg.Annual.Economic.Damage) %&gt;%
+    head(n = MAX_HARMS)
 
-myfile.df.summary.by.event &lt;- myfile.df.summary %&gt;% 
-    select(BEGIN_YEAR, EVTYPE, People.Harmed, Economic.Damage) %&gt;%
-    group_by(BEGIN_YEAR, EVTYPE) %&gt;%
-    summarize(Total.People.Harmed = sum(People.Harmed),
-              Total.Economic.Damage = sum(Economic.Damage) / 1000) %&gt;%
-    arrange(BEGIN_YEAR, -Total.Economic.Damage)</code></pre>
-<p>Here are the first 10 rows of our summary table (dollars reported in thousands):</p>
-<pre class="r"><code>print(xtable(myfile.df.summary.by.event[1:10,], 
-             caption = &quot;Harmful Weather Events Across the Country&lt;br/&gt;Damages in Thousands of Dollars&quot;,
-             display = c(&quot;d&quot;, &quot;d&quot;, &quot;s&quot;, &quot;d&quot;, &quot;d&quot;)), 
-             type = &quot;html&quot;, include.rownames = FALSE)</code></pre>
-<!-- html table generated in R 3.1.1 by xtable 1.7-3 package -->
-<!-- Sat Sep 20 22:30:33 2014 -->
-<TABLE border="1">
-<CAPTION ALIGN="bottom"> 
-Harmful Weather Events Across the Country<br />Damages in Thousands of Dollars
-</CAPTION>
-<TR> <TH> 
-BEGIN_YEAR
-</TH> <TH> 
-EVTYPE
-</TH> <TH> 
-Total.People.Harmed
-</TH> <TH> 
-Total.Economic.Damage
-</TH>  </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-HURRICANE
-</TD> <TD align="right">  
-22
-</TD> <TD align="right"> 
-1306200
-</TD> </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-TORNADO
-</TD> <TD align="right"> 
-797
-</TD> <TD align="right"> 
-626719
-</TD> </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-FLOOD
-</TD> <TD align="right">  
-39
-</TD> <TD align="right"> 
-590940
-</TD> </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-HIGH WIND
-</TD> <TD align="right"> 
-106
-</TD> <TD align="right"> 
-183042
-</TD> </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-FLASH FLOOD
-</TD> <TD align="right">  
-87
-</TD> <TD align="right"> 
-172195
-</TD> </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-WILD/FOREST FIRE
-</TD> <TD align="right">  
-31
-</TD> <TD align="right"> 
-45150
-</TD> </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-TROPICAL STORM
-</TD> <TD align="right">   
-1
-</TD> <TD align="right"> 
-44600
-</TD> </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-TSTM WIND
-</TD> <TD align="right"> 
-308
-</TD> <TD align="right"> 
-43344
-</TD> </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-BLIZZARD
-</TD> <TD align="right"> 
-179
-</TD> <TD align="right"> 
-39415
-</TD> </TR>
-  <TR> <TD align="right"> 
-1996
-</TD> <TD> 
-HAIL
-</TD> <TD align="right">  
-81
-</TD> <TD align="right"> 
-37131
-</TD> </TR>
-   </TABLE>
-
+# Find all severe events by region
+# Dollars in units of one thousand
+myfile.df.summary.by.damages &lt;- myfile.df.summary %&gt;% 
+    filter(EVTYPE %in% top.damages$EVTYPE) %&gt;%
+    select(REGION, STATE, EVTYPE, BEGIN_YEAR, Economic.Damage) %&gt;%
+    group_by(REGION, EVTYPE, STATE) %&gt;% 
+    summarize(Total.Economic.Damage = round(sum(Economic.Damage) / 1000000, 0)) %&gt;%
+    group_by(REGION, EVTYPE) %&gt;%
+    summarize(Years.In.Range = n(),
+              Total.Economic.Damage = sum(Total.Economic.Damage),
+              Avg.Annual.Economic.Damage = round(Total.Economic.Damage / Years.In.Range, 0)) %&gt;%
+    arrange(-Total.Economic.Damage)</code></pre>
+<p>When we look at the economic impacts of dangerous storms, <strong>HURRICANE/TYPHOON</strong> does the does the most damage to property and crops, affecting more people in the <strong>Southeast</strong> more than any other region.</p>
 </div>
 <div id="results" class="section level1">
 <h1>Results</h1>
+<p>Our goal in processing the data in this way is to be able to answer these two research questions</p>
+<ol style="list-style-type: decimal">
+<li><p>Which types of events are most harmful with respect to population health?</p></li>
+<li><p>Which types of events have the greatest economic consequences?</p></li>
+</ol>
 </div>
 
 
